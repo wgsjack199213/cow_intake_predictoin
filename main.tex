@@ -1,0 +1,92 @@
+\documentclass[UTF8,a4paper,10pt, twocolumn]{ctexart}
+\usepackage[left=2.50cm, right=2.50cm, top=2.50cm, bottom=2.50cm]{geometry}
+
+% -- text font --
+% compile using Xelatex
+
+%\setmainfont{Microsoft YaHei}  % 微软雅黑
+%\setmainfont{YouYuan}  % 幼圆    
+%\setmainfont{NSimSun}  % 新宋体
+%\setmainfont{KaiTi}    % 楷体
+%\setmainfont{SimSun}   % 宋体
+%\setmainfont{SimHei}   % 黑体
+
+\usepackage{times}
+%\usepackage{mathpazo}
+%\usepackage{fourier}
+%\usepackage{charter}
+%\usepackage{helvet}
+
+\usepackage{amsmath, amsfonts, amssymb} % math equations, symbols
+\usepackage[english]{babel}
+\usepackage{color}      % color content
+\usepackage{graphicx}   % import figures
+\usepackage{url}        % hyperlinks
+\usepackage{bm}         % bold type for equations
+\usepackage{multirow}
+\usepackage{booktabs}
+\usepackage{epstopdf}
+\usepackage{epsfig}
+\usepackage{algorithm}
+\usepackage{algorithmic}
+\usepackage{diagbox}
+
+
+\renewcommand{\algorithmicrequire}{ \textbf{Input:}}     % use Input in the format of Algorithm  
+\renewcommand{\algorithmicensure}{ \textbf{Initialize:}} % use Initialize in the format of Algorithm  
+\renewcommand{\algorithmicreturn}{ \textbf{Output:}}     % use Output in the format of Algorithm  
+\newcommand{\para}[1]{\smallskip\noindent\textbf{#1}}
+
+\newcommand{\wgs}[1]{\textcolor{blue}{\uline{#1}}}
+
+\usepackage{fancyhdr}   % 设置页眉、页脚
+%\pagestyle{fancy}
+%\lhead{}
+%\chead{}
+%\rhead{head and foot!!}
+%\lfoot{}
+%\cfoot{}
+%\rfoot{}
+
+
+\usepackage{hyperref}   % bookmarks
+\hypersetup{colorlinks, bookmarks, unicode} % unicode
+
+\graphicspath{{figures/}}
+
+
+\title{泌乳牛自由采食量预测}
+\author{王国赛\thanks{邮箱：wgs14@mails.tsinghua.edu.cn}}
+\date{\today}
+
+\begin{document}
+    \maketitle
+    \thispagestyle{fancy}
+
+\input{tex_files/introduction}
+\input{tex_files/related}
+\input{tex_files/analyze}
+\input{tex_files/dataset}
+\input{tex_files/model}
+\input{tex_files/evaluation}
+\input{tex_files/discussion}
+\input{tex_files/conclusion}
+
+\input{tex_files/appendix}
+
+
+%\begin{thebibliography}{10}
+%
+%\bibitem{micali2016algorand}
+%abccsddf
+%
+%
+%\end{thebibliography}
+
+\renewcommand\refname{参考文献}
+\small
+\bibliographystyle{plain}
+\bibliography{ref} 
+
+
+\end{document}

@@ -1,0 +1,756 @@
+\section{问题分析和形式化描述}
+\label{analyze}
+
+\subsection{采食量的影响因素}
+
+泌乳牛自由采食量主要受到内部因素和外部因素影响。部分相关因素列举如下：
+
+\para{内部因素：} 
+
+\begin{itemize}
+\item
+奶牛品种
+\item
+奶牛泌乳期（胎次，对应不同的泌乳周期，如初产牛、经产牛）
+\item
+ 奶牛泌乳周（或泌乳天数，对应同一泌乳周期中的不同阶段，如高产、中产、低产、干奶）
+\item
+奶牛体重
+\item
+奶牛产奶量（产奶浄能）
+\item
+奶牛运动量
+\item
+奶牛身心状态（疾病、情绪等）
+\end{itemize}
+
+\para{外部因素：} 
+\begin{itemize}
+\item
+饲料特性
+\item
+温度湿度（热应激）
+\item
+其他应激（如疫苗注射，受到惊吓等）
+\item
+其他环境因素（如较宽的槽位可提升采食量）
+
+\end{itemize}
+
+理想情况下，在预测牛的采食量时，模型应将尽可能多的上述因素纳入考虑。
+但实际情况中常面临两个问题：(1)数据类别采集不全，(2)数据量积累较少。
+问题(1)会制约模型预测目标值采食量的能力，因为未观测/记录到的因素会对采食量带来模型无法预测的波动。
+问题(2)会影响模型的精度，因为通常基于机器学习或者数据挖掘技术构建的模型在训练集越大，模型性能会越好，尤其是一些复杂度高的模型如人工神经网络（Artifical Neural Network）深度学习（Deep Learning）等。
+故在本工作中我们会取舍地考虑部分因素。详情请见第\ref{dataset}节。
+
+\subsection{以牛棚为建模单位}
+
+生产环境中，牧场对草料的发放以及对剩草量的统计以牛棚为单位，故我们不以单头牛的采食量为预测目标，而是以牛棚中牛群整体的采食量（或者等价的牛棚中头均采食量）为预测目标。通常同牛棚内牛的品种相同，泌乳期相近或相同，泌乳周相近或相同，故我们在建模时可忽略牛棚内单头牛之间的差异，仅考虑牛群整体的特性（或等价的头均特性）。
+
+\subsection{问题形式化}
+
+生产环境中，每牛棚每天上报一次草量，对应当天中午、晚上和第二天早上三次投喂草料的总草量。
+
+我们记某牛棚第t天上午上报的头均草量（报草量/牛的数量）为$r_{t+1}$\footnote{用$t+1$而不是$t$表示是为了避免在时间先后上引起歧义，可以理解$r_{t+1}$为给牛分配的吃到第$t+1$天的草量。}，
+实际采食量为$y_{t+1}$。
+我们用向量$X_t$表示第$t$天的输入变量。具体地，$X_t$的每一个元素为一个关于牛的或关于环境的观测数据，如第$t$天牛的产奶量等等。
+
+我们希望得到一个预测模型$f$使得
+\begin{equation}
+	\hat y_{t+1} = f(X_t, X_{t-1}, \cdots, X_{t-w+1}) \approx {y_{t+1}}
+\end{equation}
+其中$\hat y$表示对$y$变量的预测值，非负整数$w$（window size）表示我们在第$t$天时，回顾历史（含当天）的时间跨度。在最简单的模型中，$w=1$，即
+\begin{equation}
+	\hat y_{t+1} = f(X_t) \approx {y_{t+1}}
+\end{equation}
+
+本项工作中我们主要采用平均绝对误差（Mean Absolute Error，MAE）来衡量模型$f$的预测精度。对于$n$条样本$y_1, y_2 \cdots, y_{n}$和模型对它们的预测值$\hat{y_1}, \hat{y_2}, \cdots, \hat{y_{n}}$，定义平均绝对误差$\epsilon_{MAE}$如下：
+\begin{equation}
+	\epsilon_{MAE} = \frac 1 n \sum_{i=1}^{n} | \hat{y_i} - y_i | 
+\end{equation}
+
+
+
+
+
+
+
+\begin{appendix}
+
+\section{泌乳天数、泌乳期数据的获取和整理}
+\label{calving_data}
+
+牧场管理系统中泌乳天数和泌乳期只有各牛只当天（访问软件进行查询的日期）的数据，而没有历史上每一天的数据。为了将这两项数据作为特征，我们需要解决两个问题：(1) 确定每头牛在历史上每天处于哪一个牛棚（因为我们以牛棚为单位进行建模）；（2）确定每头牛在历史上每天的泌乳天数和泌乳期。
+	
+为了解决问题(1)，我们可以借助牧场管理系统中的“改变组别”（组别和牛棚有确定的映射关系）事件记录，来反推出历史上每一天各牛只所在牛群的情况。具体地，获得管理系统访问权限后，进入“动物”——“事件报告”——“事件列表”，即可访问一段时期内，所有被系统记录的牛只事件（如兽医治疗事件、繁育操作事件等），包括改变组别事件。组别改变事件的格式可抽象为$\langle id, t, g_1, g_2\rangle$，其中$id$为牛的编号，$t$为日期，$g_1$为改变前组别，$g_2$为改变后组别。对于每一头牛，我们整理出它的所有改变组别的事件序列（按日期排序），从而可以推断得到一定时间范围内，该牛只每天所处的牛棚（组别和牛棚的映射关系可从系统中的动物报告中抓取解析得到）。
+
+为了解决问题(2)，我们可以访问管理系统中的“动物”——“动物报告”板块。如果板块中已存在的“泌乳牛”等报告缺乏我们关系的某些字段（如泌乳期），则我们可以仿照“泌乳牛”报告，新建一个报告，根据需要（定制化报告所需包含的字段）构造出包含所有牛只在\emph{当前日期}的泌乳天数、泌乳期（胎次）、组别数据的报告。由此我们可获得牛只编号和当天（访问软件进行查询的日期）泌乳天数和泌乳期，从而可以追溯历史反推出过去每一天，每头牛的泌乳天数和泌乳期。当推断泌乳天数降至负整数后，我们有两种可能的应对措施：忽略该头牛在上个泌乳周期中的所有泌乳天数、胎次数据，和直接/间接查询或估计该头牛的上一个泌乳周期开始的日期。在本工作中由于时间跨度不是很长（约4-5个月），我们为了简化数据预处理工作，采取第一个策略。
+	
+	
+\end{appendix}
+\section{小结与下一步工作方向}
+\label{futurework}
+
+\subsection{实验结论整理}
+
+xgboost模型对历史数据的拟合能力很强。但是头均采食量预测任务要求模型具有较好的泛化性能（对未见过数据样本的预测能力）。因而不做交叉验证，不拆分训练集、测试集的实验结果意义不大。
+
+在第\ref{predict_singleday_cowshed}节中，我们提出了建模面临权衡的问题。虽然我们实验发现不同牛棚的头均采食量的波动模式不同，导致模型对不同牛棚头均采食量的刻划能力不同，但是通过实验发现，按照牛棚进行拆分，以“头胎”牛群为例，对单类别牛群单独进行建模并预测的效果并不好。我们认为最重要的原因是数据样本量不够大，导致模型不能充分学到头均采食量变动的各种模式。
+
+通过实验我们发现使用单日观测数据对第二天进行预测的效果较差，当引入时域信息（用最近几日头均采食量的梯度来表征时域上采食量的变化趋势）后，模型的预测性能能够提升，并优于对照组，但提升并不显著。
+
+通过对各特征的重要性进行分析，可知对xgboost模型预测第二天头均采食量最重要的特征是当天的头均采食量，其次是当天的头均产奶量，最高气温和时域采食量梯度信息权重相对最低。
+
+
+\subsection{下一步工作方向}
+
+接下来工作主要分为可并行开展的三块：数据集扩充，特征扩充，特征工程。
+
+\para{数据集扩充：}扩大数据集样本量，积累更多数据。数据积累需要时间。如历史上（2017年3月以前）有各牛棚新增的采食量（或剩草量）数据，也可合并进入当前数据集。且在未来如有可能可在牛棚中增加部署传感器，例如温湿度传感器等等。
+
+\para{特征扩充：}如前文所述，当前优先考虑增加的特征包括：泌乳期、泌乳周，其他有记录的应激情况（如牛棚疫苗注射记录）。如有可能，可另外增加牛的运动量数据（如计步器采集数据）。同时我们将增加分析湿度数据，和最高气温一并考虑。
+
+\para{特征工程：}实验显示时域信息对于模型预测性能有提升作用。我们将继续在此方面进行实验（尝试各种特征提取、变换方式）。同时对新纳入的输入变量如泌乳期、泌乳周，应激情况，湿度等，我们也尝试进行特征工程处理，实验分析其对模型性能的影响。\section{数据集和特征构造}
+\label{dataset}
+
+\subsection{数据概览}
+
+本项工作使用的主要数据集取自《剩草量分析表》，包含第三牧场2017年3月5日至7月25日约140天的各牛棚采食情况记录。数据集包含的牛棚列举在表\ref{cowshed}中。数据集记录了16个牛棚每天的\emph{牛头数}\footnote{牛只调群很常见，因此每个牛棚每天的牛群规模可能会有增减。}，\emph{报草量}，\emph{减草量}\footnote{每天有一次机会可以对上报草量进行增减。例如观察到中午牛食欲不振，则可以适当减少当天至第二天的总草量。减草量也可以为负值，表示适当增加草量。}，\emph{剩草量}和\emph{头均产奶量}。通过简单计算可以进一步得到计划头均采食量（$r_t =$(报草量-减草量)/牛头数）和实际头均采食量（$y_t =$(报草量-减草量-剩草量)/牛头数）。
+
+\begin{table}
+\caption{牛棚概览}
+\label{cowshed}
+\footnotesize
+\begin{center}
+\begin{tabular}{|c|}
+\hline
+	\textbf{牛棚}  \\
+\hline
+    B1-1N  B1-1S  
+    B1-3N  B1-3S  \\
+    B1-5N  B1-5S  
+    B1-7N  B1-7S  \\
+    B4-1N  B4-1S  
+    B4-3N  B4-3S  \\
+    B4-5N  B4-5S  
+    B4-7N  B4-7S  \\
+\hline
+\end{tabular}
+\end{center}
+\end{table}
+
+
+\emph{温度、湿度}是影响头均采食量的重要影响参数。温度和湿度数据可从记录历史天气的网站如\cite{weather,tianqi}上抓取获得\footnote{\cite{weather}上可能无湿度信息，\cite{tianqi}上有湿度信息。}。
+
+\emph{泌乳期（胎次）}和\emph{泌乳周}（实际采用的是\emph{泌乳天数}）数据可以从牧场管理系统（银香伟业采用阿菲金管理系统）中获取。这两项数据处理的细节请参考附录第\ref{calving_data}节。
+
+
+
+\subsection{关于部分未采用数据说明} 
+\begin{itemize}
+\item 奶牛品种：各牧场主要包含两种奶牛：荷斯坦奶牛和娟姗奶牛（同牛棚同日内牛群属同种）。但当前第三牧场中全部牛只均为荷斯坦奶牛，无娟姗奶牛，故我们不区分牛的品种，对所有数据统一处理。
+
+\item 奶牛体重：我们将牛棚的牛群作为整体分析其头均采食量，故暂时假设各牛棚头均体重相似，不是影响头均采食量的主要因素。
+
+\item 奶牛运动量：当前先假设各牛棚牛群每日运动量相近。如有计步器数据，可将步数信息和采食量做关联性分析。
+
+\item 奶牛身心状况：奶牛身心状况难以量化。目前工作未考虑此类特征。未来工作可考虑通过牧场系统中对牛的检查、治疗等事件记录推断估计出各牛棚的整体健康状态。
+
+\item 饲料特性：各牛棚除新产牛外（？待验证），主要采用同种配方的饲料。本项工作主要针对处高产期的牛的采食量建模，故模型未将饲料相关的数据视作输入变量。
+
+\item 其他应激：当前数据集未包含疫苗注射记录。据技术人员称疫苗注射会令牛产生应激，影响短期内采食量。未来工作可考虑通过牧场系统中对牛的检查、治疗等事件记录推断、量化每天各牛棚可能的应激事件。
+\end{itemize}
+
+
+\subsection{数据预处理和特征构造}
+
+根据《剩草量分析表》中“牛只类型”字段标注，各牛棚在大部分日期内牛属于“高产”，但个别牛棚在部分日期内被标注为“新产”（生产完牛犊后处于泌乳初期的牛？）。在建模前我们将所有标注为“新产”的数据样本剔除掉。
+同时部分日期的数据存在缺失值。当前我们采取最简易的缺失值处理手段：将不完整的数据样本剔除掉。
+
+
+在预测第$t+1$天头均采食量$y_{t+1}$时，本工作尝试多种构建输入变量$X$的方式，主要可分为两类
+(1)仅考虑第$t$天的观测情况（头均采食量、头均产奶量、温湿度），和(2)考虑到一段连续日期即$t-w, t-w+1, \cdots, t$天的观测情况，包括头均采食量、头均产奶量、连续w天头均采食量（直接拼接或用小波分解提取系数）等。
+
+我们对于温湿度数据，计算得到THI（Thermal-Humidity Index，温湿度指数）指标作为模型的输入变量，而不是将温度和湿度作为单独的变量输入模型。THI是一个用温度和湿度的综合影响反应热应激水平的指标，它有多种不同的定义/计算方式，最常用的经验公式为：
+\begin{equation}
+	THI=0.72 \times (Td + Tw) + 40.6
+\end{equation}
+其中$Td$和$Tw$分别为干湿球温度计读出的干球温度和湿球温度。但由于干湿球温度数据不便于获取，我们在本工作中采用另一种计算THI的公式\cite{thi_cow_wang}：
+\begin{equation}
+	THI=0.81Td + (0.99Td - 14.3)RH + 46.3
+\end{equation}
+其中RH（Relative Humidity）为相对湿度。由于每天的温度是个随时间变化的变量，我们在实验中用天气预报给出的当日最高气温来代替公式中的干球温度Td，来表征牛受到热应激的情况。
+
+在附录第\ref{calving_data}节中，我们介绍了各牛只泌乳天数、泌乳期数据的获取。由于我们以牛棚为单位进行建模，我们取各牛棚每天牛群的泌乳天数、泌乳期的\emph{中位数}\footnote{采取中位数而非平均数的动机是避免少量离群点对整体统计指标带来较大偏移。}，作为对该日该牛群整体泌乳周期状态的刻划。
+
+
+数据预处理和特征提取的具体细节请参考代码文件（preprocess.ipynb和model.ipynb）中的文字说明。
+不同方式构建模型的性能请见第\ref{evaluation}节。
+
+
+
+
+
+
+
+\section{实验分析}
+\label{evaluation}
+
+\subsection{实验设置}
+
+在实验中我们采用了\emph{对照组}，对照组作为比较的基准对象用最简易傻瓜的方式建模预测，具体地，$\hat y_{t+1} = y_t$，即用当天的实际头均采食量直接作为第二天的头均采食量预测值。
+对照组的$\epsilon_{MAE}$（基准结果）：\textbf{1.1560}。
+
+我们采用交叉验证\footnote{具体地，$k$折交叉验证将所有数据样本随机平均分为$k$组，重复$k$次测试：每次测试用其中$k-1$组数据样本组合成训练集，训练构建得到模型（预测器），并将模型用于剩下的一组数据样本（作为测试集）进行预测，并在测试集上评估相关误差指标。}的方式评估模型的泛化能力，即对历史未见数据的预测能力。
+
+以下实验如不另加说明，均为8折交叉验证的结果。在表格中，测试集上的最优结果用下划线标出。
+
+
+表格符号注解请见表\ref{table_notation}所示。
+表格中提到的\emph{时间序列}是指历史w天（含过去w-1天和当天）的数据按日期排列成的序列。
+
+\begin{table}
+\caption{表格部分所用符号注解}
+\label{table_notation}
+\footnotesize
+\begin{center}
+\begin{tabular}{|c|p{5.6cm}|}
+\hline
+\textbf{符号} & \textbf{含义} \\
+\hline
+    THI & Thermal Humidity Index（温度湿度指数）。 \\
+    k & 回顾历史的天数。不加说明时，k=1。  \\
+    cA & 头均采食量时间序列做小波分解的1阶近似。 \\
+    cD & 头均采食量时间序列做小波分解的1阶细节。 \\
+    cA\_milk & 头均产奶量时间序列做小波分解的1阶近似。 \\
+    cD\_milk & 头均产奶量时间序列做小波分解的1阶细节。 \\
+    cA' & 头均采食量时间序列做小波分解的2阶近似。 \\
+    cD' & 头均采食量时间序列做小波分解的2阶细节。 \\
+\hline
+\end{tabular}
+\end{center}
+\end{table}%
+
+
+\subsection{仅考虑单日数据}
+
+表\ref{table_y_m}、\ref{table_y_m_thi}、\ref{table_y_m_thi_cald}、\ref{table_y_m_thi_cald_calp}是仅考虑当日数据，不考虑历史时序数据（w=1）的预测结果。
+
+
+\begin{table*}
+\caption{头均采食量+头均产奶量}
+\label{table_y_m}
+\footnotesize
+\begin{center}
+	\begin{tabular}{|c|c|c|c|c|c|c|}
+\hline
+& \multicolumn{6}{|c|}{n\_enumerators} \\ \cline{2-7}
+max\_depth & 75 & 100 & 150 & 200 & 250 & 300\\
+\hline
+1 & 1.1352/1.1788 & 1.1218/1.1722 & 1.1129/1.1691 & 1.1085/1.1686 & 1.1055/\wgs{1.168} & 1.1035/1.1681 \\
+2 & 1.0972/1.1678 & 1.0863/1.1683 & 1.0692/1.1702 & 1.055/1.1718 & 1.0417/1.1749 & 1.0298/1.1776 \\
+3 & 1.0627/1.1684 & 1.0451/1.1715 & 1.0161/1.1739 & 0.9879/1.18 & 0.9626/1.1864 & 0.9407/1.1947 \\
+\hline
+	\end{tabular}
+\end{center}
+\end{table*}%
+
+
+\begin{table*}
+\caption{头均采食量+头均产奶量+THI}
+\label{table_y_m_thi}
+\footnotesize
+\begin{center}
+	\begin{tabular}{|c|c|c|c|c|c|c|}
+\hline
+& \multicolumn{6}{|c|}{n\_enumerators} \\ \cline{2-7}
+max\_depth & 75 & 100 & 150 & 200 & 250 & 300\\
+\hline
+1 & 1.1354/1.1794 & 1.1217/1.1716 & 1.1105/1.1684 & 1.1054/1.1678 & 1.1016/1.1671 & 1.0985/1.166 \\
+2 & 1.0812/1.1526 & 1.0672/1.1498 & 1.0431/1.1452 & 1.0227/1.1426 & 1.0053/1.1397 & 0.9907/1.1388 \\
+3 & 1.0284/1.1404 & 1.0019/1.1336 & 0.9587/1.1291 & 0.9239/\wgs{1.1277} & 0.894/1.1325 & 0.8668/1.1347 \\
+4 & 0.9742/1.1415 & 0.9344/1.1329 & 0.8714/1.1288 & 0.8182/1.1311 & 0.7711/1.1366 & 0.7292/1.1423 \\
+\hline
+	\end{tabular}
+\end{center}
+\end{table*}%
+
+
+\begin{table*}
+\caption{头均采食量+头均产奶量+THI+泌乳天数}
+\label{table_y_m_thi_cald}
+\footnotesize
+\begin{center}
+	\begin{tabular}{|c|c|c|c|c|c|c|}
+\hline
+& \multicolumn{6}{|c|}{n\_enumerators} \\ \cline{2-7}
+max\_depth & 75 & 100 & 150 & 200 & 250 & 300\\
+\hline
+1 & 1.1275/1.1739 & 1.1066/1.1591 & 1.0867/1.1474 & 1.0767/1.1431 & 1.0717/1.1419 & 1.0682/1.1416 \\
+2 & 1.0512/1.1307 & 1.0335/1.1262 & 1.0078/1.124 & 0.9868/1.1187 & 0.9682/1.1187 & 0.9526/1.1195 \\
+3 & 0.9884/1.1195 & 0.9595/1.1142 & 0.9116/1.1095 & 0.8733/1.1108 & 0.8391/1.1144 & 0.8088/1.1166 \\
+4 & 0.9203/1.1086 & 0.8784/\wgs{1.1029} & 0.8068/1.1067 & 0.7481/1.1102 & 0.6973/1.1184 & 0.6521/1.1263 \\
+5 & 0.8504/1.1032 & 0.79/1.1093 & 0.6967/1.12 & 0.6172/1.1312 & 0.5508/1.1443 & 0.4921/1.1507 \\
+\hline
+	\end{tabular}
+\end{center}
+\end{table*}%
+
+\begin{table*}
+\caption{头均采食量+头均产奶量+THI+泌乳天数+胎次}
+\label{table_y_m_thi_cald_calp}
+\footnotesize
+\begin{center}
+	\begin{tabular}{|c|c|c|c|c|c|c|}
+\hline
+& \multicolumn{6}{|c|}{n\_enumerators} \\ \cline{2-7}
+max\_depth & 75 & 100 & 150 & 200 & 250 & 300\\
+\hline
+1 & 1.1275/1.1739 & 1.1066/1.1591 & 1.0867/1.1474 & 1.0767/1.1431 & 1.0717/1.1419 & 1.0682/1.1416 \\
+2 & 1.0512/1.1307 & 1.0335/1.1262 & 1.0078/1.124 & 0.9868/1.1187 & 0.9682/1.1187 & 0.9526/1.1195 \\
+3 & 0.9884/1.1195 & 0.9595/1.1142 & 0.9116/1.1095 & 0.8733/1.1108 & 0.8391/1.1144 & 0.8088/1.1166 \\
+4 & 0.9203/1.1086 & 0.8784/\wgs{1.1029} & 0.8068/1.1067 & 0.7481/1.1102 & 0.6973/1.1184 & 0.6521/1.1263 \\
+5 & 0.8504/1.1032 & 0.79/1.1093 & 0.6967/1.12 & 0.6172/1.1312 & 0.5508/1.1443 & 0.4921/1.1507 \\
+\hline
+	\end{tabular}
+\end{center}
+\end{table*}%
+
+
+
+
+%
+% Using wavelet decomposition
+%
+\subsection{小波分解考虑多日时序数据}
+表\ref{table_y_m_thi_cald_calp_ca}、\ref{table_y_m_thi_cald_calp_cd}、 \ref{table_y_m_thi_cald_calp_ca_cd}、 \ref{table_y_m_thi_cald_calp_ca_cd_cam}、\ref{table_y_m_thi_cald_calp_ca_cd_cdm}、\ref{table_y_m_thi_cald_calp_ca_cd_cam_cdm}是考虑最近两天（含当天）时序数据（k=2）的预测结果。
+
+
+
+
+
+
+\subsection{直接拼接多日时序数据}
+
+
+
+
+
+
+
+
+
+
+
+
+\section{实验分析}
+\label{evaluation}
+
+\subsection{单日数据预测第二天采食量}
+
+本节训练模型使用的数据每条样本格式为
+\begin{equation}
+\label{sample}
+	\langle (y_t, m_t, T^h_t), y_{t+1} \rangle
+\end{equation}
+	其中输入变量$y_t$为第$t$天某牛棚的头均采食量，$m_t$为第$t$天头均产奶量，$T_t^h$为第$t$天的最高气温，输出变量（预测值）$y_{t+1}$为第$t+1$天的头均采食量。
+经过数据预处理，得到数据样本约1750条。
+	
+在部分实验中我们采用了\emph{对照组}，对照组作为比较的基准对象用最简易傻瓜的方式建模预测，具体地，$\hat y_{t+1} = y_t$，即用当天的实际头均采食量直接作为第二天的头均采食量预测值。
+
+	
+\subsubsection{模拟对历史数据的拟合}
+
+XGBoost模型拟合历史数据的平均绝对误差请见表\ref{tab:singleday_all}，部分样本的预测值和实际值请见图\ref{fig:singleday_all}。XGBoostost模型的参数n\_estimators取200，max\_depth取2（参见第\ref{best_para}节）。
+
+表\ref{tab:singleday_all}显示单日数据构建的模型相比于对照组能够有效减小平均绝对误差MAE，$\epsilon_{MAE}=1.01$指每日预测头均和实际头均的平均绝对误差是1.01千克，平均误差率约在$2.5\%\sim3.4\%$左右。$R^2$刻划模型对数据的拟合度，0.886意味着拟合度很高，模型对历史数据拟合能力强。
+
+\begin{table}
+\caption{单日数据建模拟合历史数据的误差。}
+\begin{center}
+\footnotesize
+\begin{tabular}{|c|c|}
+\hline
+	指标 & 值\\
+\hline
+	$\epsilon_{MAE}$  &  1.01\\
+	对照组$\epsilon_{MAE}$ & 1.274 \\
+	$R^2$  &  0.886 \\
+\hline
+\end{tabular}
+\end{center}
+\label{tab:singleday_all}
+\end{table}
+
+\begin{figure}
+\begin{center}
+	\includegraphics[width=0.9\linewidth]{singleday_all}
+\caption{单日数据建模在部分样本上的预测结果。}
+\label{fig:singleday_all}
+\end{center}
+\end{figure}
+
+另外通过XGBoost的plot\_importance函数可以可视化不同特征对于模型的重要性或贡献程度，结果如图\ref{fig:feature_importance}所示。由图可知，当取单日观测数据拟合第二天头均采食量时，各特征重要性排序为：头均采食量>头均产奶量>最高气温。
+
+\begin{figure}
+\begin{center}
+	\includegraphics[width=0.9\linewidth]{feature_importance}
+\caption{不同特征对XGBoost模型的贡献程度。$f0,f1,f2$分别对应数据样本中的$y_t, m_t, T^h_t$。}
+\label{fig:feature_importance}
+\end{center}
+\end{figure}
+
+模型对历史数据的拟合只能说明模型复杂程度足够高，但不能说明模型对于\uline{未见过的数据样本}具有较强的预测能力，即对于有预测性质的任务，我们更需要关注模型的\emph{泛化能力}。
+我们在下一小节做相关分析。
+
+\subsubsection{模拟对未见数据的预测}
+\label{predict_singleday}
+
+我们采用交叉验证\footnote{具体地，$k$折交叉验证将所有数据样本随机平均分为$k$组，重复$k$次测试：每次测试用其中$k-1$组数据样本组合成训练集，训练构建得到模型（预测器），并将模型用于剩下的一组数据样本（作为测试集）进行预测，并在测试集上评估相关误差指标。}的方式评估模型的泛化能力，即对历史未见数据的预测能力。
+
+
+\begin{table}
+\caption{单日数据建预测时5折交叉验证的误差。}
+\begin{center}
+\footnotesize
+\begin{tabular}{|c|c|}
+\hline
+	$\epsilon_{MAE}$ & $R^2$ \\
+\hline
+ 1.202 &  0.728\\
+ 1.221 &  0.797\\
+ 1.243 &  0.744 \\
+ 1.359 &  0.724 \\
+ 1.430 &  0.560 \\
+\hline
+\end{tabular}
+\end{center}
+\label{tab:singleday_predict_all}
+\end{table}
+
+
+表\ref{tab:singleday_predict_all}显示了对所有数据样本做5折交叉验证的结果（交叉验证时不同随机分组会导致不同的结果，表中显示随机挑选某次实验的结果）。
+比较表\ref{tab:singleday_predict_all}和\ref{tab:singleday_all}，可知预测时的平均$\epsilon_{MAE}=1.291$略高于对照组的$\epsilon_{MAE}$，模型相比于对照组\uline{预测失效}。
+虽然在上一节观察到模型拟合历史数据的能力较强，但交叉验证的结果说明模型缺乏泛化能力，这主要由两个可能原因导致：(1)在部分实验中$\epsilon_{MAE}$较高，原因可能是在拆分训练集和测试集时，某些相对难预测的模式的样本被分至测试集但未出现在训练集中（导致模型未能学到这些模式）。
+如数据集规模进一步增大，则模型的预测性能应当进一步提升。
+(2)仅以单日观测数据作为特征，缺乏对采食量变化模式的刻划能力。我们在第\ref{temporal}节尝试改进措施。
+
+
+
+\subsubsection{分牛棚的拟合和预测分析}
+\label{predict_singleday_cowshed}
+
+我们进一步分析模型对于不同牛棚的牛群采食量的预测能力。
+我们先用所有样本数据训练得到模型去\emph{拟合}各个牛棚的数据，观察模型对于不同牛棚牛群采食量刻划效果的差异，结果如表\ref{tab:regression_multicowshed}所示。
+
+\begin{table}
+\caption{不同牛棚头均采食量拟合的误差。}
+\begin{center}
+\footnotesize
+\begin{tabular}{|c|c|c|c|c|}
+\hline
+	牛棚 & 牛只类型 & $\epsilon_{MAE}$ & 对照组$\epsilon_{MAE}$ &$R^2$ \\
+\hline
+B1-1N& 头胎 & 0.793 & 0.964 & 0.424 \\
+B1-1S& 头胎 & 0.657 & 0.865 & 0.73 \\
+B1-3N& 多胎 & 0.756 & 0.751 & 0.475 \\
+B1-3S& 头胎 & 0.706 & 0.726 & 0.696 \\
+B1-5N& 头胎 & 1.173 & 1.824 & 0.846 \\
+B1-5S& 头胎 & 1.375 & 2.806 & 0.919 \\
+B1-7N& 头胎 & 1.232 & 1.477 & 0.898 \\
+B1-7S& 多胎 & 0.995 & 1.105 & 0.458 \\
+B4-1N& 参配 & 1.095 & 1.56 & 0.584 \\
+B4-1S& 怀孕 & 0.969 & 1.193 & 0.699 \\
+B4-3N& 蹄病 & 1.248 & 1.455 & 0.501 \\
+B4-3S& 高产 & 1.39 & 1.743 & 0.564 \\
+B4-5N& 多胎 & 0.882 & 1.197 & 0.757 \\
+B4-5S& 头胎 & 1.008 & 1.088 & 0.556 \\
+B4-7N& 多胎 & 1.071 & 1.192 & 0.664 \\
+B4-7S& 头胎 & 0.913 & 0.987 & 0.798 \\
+\hline
+\end{tabular}
+\end{center}
+\label{tab:regression_multicowshed}
+\end{table}
+
+观察可以发现(1)各牛棚模型拟合平均绝对误差均低于对照组；
+(2)不同牛棚拟合的误差有高有低，大致和对照组拟合误差高低趋势一致。
+观察(2)说明模型的预测误差主要来自于日头均采食量的较大波动，而模型难以预测这种突然的升、降。
+$R^2$值最高的（模型拟合度最高的）几个牛棚为B1-5S、B1-7N、B1-5N、B4-7S、B4-5S（$R^2$均高于0.75）。
+这些牛棚除B4-5S外，均为“头胎”，其原因可能是“头胎”牛占数据样本中的大多数，使得模型对于该类型牛的采食量模式刻划得较好。而牛只这也说明不同类型牛的采食量模式存在差异。
+因而在建模时应当考虑如下权衡：
+
+\emph{问题：建模时应对不同品种、类型（头胎、多胎、参配等）的牛群分别构建模型，还是用同一模型建模，用某些特征来表征这种差异？}
+
+如果数据量充足，且能够提取富有表征能力的特征，则构建统一模型可以达到较好的预测效果（有待未来实验验证）。
+
+但当前训练数据样本有限且特征不够丰富，我们先尝试简化问题进行分牛棚的实验：排除影响模型预测效果的因素，只选取牛只类别为“头胎”的牛棚，单独进行建模。
+如此筛选得到约760条数据样本，在所有“头胎”牛棚牛群上进行5折交叉验证，实验结果如表\ref{tab:singleday_first_predict_all}所示。在只考虑“头胎”牛群时，对照组的平均绝对误差$\epsilon_{MAE}$为1.306。观察表格结果可见5折交叉验证的$\epsilon_{MAE}$的平均值1.328高于对照组，且高于不区分牛群时的平均$\epsilon_{MAE}$，说明模型\uline{预测失效}。原因如第\ref{predict_singleday}节所述，主要有二：(1)数据量过小，测试集中存在训练集未涵盖的采食量变化模式，导致模型泛化能力差；(2)模型的输入变量缺乏富有表征力的特征。
+其中原因(1)尤为重要，因为如只选择“头胎”牛群，则数据集样本数仅为约760，不到上节全部牛群数据量的一半。
+
+\begin{table}
+\caption{单日数据建预测“头胎”牛群时5折交叉验证的误差。}
+\begin{center}
+\footnotesize
+\begin{tabular}{|c|c|}
+\hline
+	$\epsilon_{MAE}$ & $R^2$ \\
+\hline
+  1.361  &  0.627 \\
+ 1.404  &  0.560 \\
+ 1.231  &  0.750 \\
+ 1.376  &  0.720 \\
+ 1.267  &  0.653 \\
+\hline
+\end{tabular}
+\end{center}
+\label{tab:singleday_first_predict_all}
+\end{table}
+
+
+
+
+\subsection{加入时域信息预测第二天采食量}
+\label{temporal}
+
+\begin{figure}
+\begin{center}
+	\includegraphics[width=0.8\linewidth]{feature_importance_gradient}
+\caption{不同特征对XGBoost模型的贡献程度。$f0,f1,f2,f3$分别对应数据样本中的$y_t, m_t, T^h_t, g_{t,k}$。}
+\label{fig:feature_importance_gradient}
+\end{center}
+\end{figure}
+
+本节训练模型使用的数据每条样本格式为：
+\begin{equation}
+	\langle (y_t, m_t, T^h_t, g_{t,k}), y_{t+1} \rangle
+\end{equation}
+相比于式\ref{sample}新增了一项$g_{t,k}$，表示从第$t$天开始向前回溯$k$天的采食量的梯度值。
+具体地，$g_{t,k}$是用线性回归拟合点集$\{(1, y_{t-k+1}), (2, y_{t-k+2}), \cdots, (k, y_{t})\}$得到直线的斜率。我们希望引入该项来增加刻划时域上头均采食量变化趋势的特征。
+
+我们设定$k=3$（考虑过去3天采食量的梯度），经过数据预处理、缺失值剔除，得到全部数据样本约1700条。实验中XGBoost模型的参数n\_estimators取150，max\_depth取2（参见第\ref{best_para}节）。
+在所有数据样本做拟合分析各特征的重要性，结果如图\ref{fig:feature_importance_gradient}所示。
+由图可知，当引入时域特征拟合第二天头均采食量时，各特征重要性排序为：头均采食量>头均产奶量>最高气温 $\approx$ 头均采食量时域梯度。
+
+
+对所有数据样本做5折交叉验证的结果如表\ref{tab:gradient_predict_all}所示。
+对照组（用当天头均采食量直接当做第二天头均采食量预测值）的$\epsilon_{MAE}$为1.274。分析表格可见$\epsilon_{MAE}$的平均值1.209低于对照组，说明\uline{预测有效}，虽然改进并不显著。
+
+\begin{table}
+\caption{加入时域信息预测所有牛群时5折交叉验证的误差。}
+\begin{center}
+\footnotesize
+\begin{tabular}{|c|c|}
+\hline
+	$\epsilon_{MAE}$ & $R^2$ \\
+\hline
+1.239 & 0.767 \\
+1.193 & 0.772 \\
+1.203 & 0.768 \\
+1.196 & 0.822 \\
+1.215 & 0.706 \\
+\hline
+\end{tabular}
+\end{center}
+\label{tab:gradient_predict_all}
+\end{table}
+
+我们仿照第\ref{predict_singleday_cowshed}节，剔除其他类别的牛群，仅对“头胎”牛群进行分析，则结果和第\ref{predict_singleday_cowshed}节类似，预测误差1.286高于对照组1.258，且高于不拆分牛群的预测结果（1.209）。数据集样本量不够大是主要原因。
+
+
+\section{问题描述}
+\label{introduction}
+
+
+泌乳牛的草料采食量会影响其产奶量及其健康状况。
+在实际生产中草料需要提前1天时间制备，并且1天后吃剩的草料将不再提供给牛食用，以免变质的草料影响牛的健康情况。因此，饲养员需要提前估计未来1天内牛的自由采食量，并由此上报需要制备的草料量。理想情况下，饲养员希望控制报草量（即实际发放至牛棚的草料量）略大于牛的自由采食量，即一天后草料有剩余但剩余不多，以免不能满足牛的草料需求或者造成草料的浪费。具体地，牧场规定草料剩余量最好不超过当天报草量的5\%。
+
+泌乳牛的草料采食量受到多方面因素的影响，因而每天每牛棚的自由采食量会发生波动。传统生产中饲养员会根据经验对相关因素进行估计判断，以估计每天每牛棚的报草量。
+这种方式可能会由于饲养员的经验差异导致或大或小的预测误差，可能会造成饲料不足或饲料浪费的问题。
+本工作希望通过对历史采集数据的分析，量化地构建预测泌乳牛采食量的模型，从而给饲养员提供较准确的采食量预测作为参考，辅助饲养员更好地制定报草量。
+
+本文分为以下几个部分：
+第\ref{related}节简述关于采食量预测的相关工作情况。
+第\ref{analyze}节对采食量预测问题进行分析并形式化地描述问题。
+第\ref{dataset}节概述建模所使用的数据以及对数据的处理方式，
+第\ref{model}节介绍预测模型，第\ref{evaluation}节展示实验结果并对结果进行分析。
+第\ref{futurework}节讨论下一步的工作方向。
+\section{采食量预测模型：XGBoost}
+\label{model}
+
+\subsection{XGBoost模型简介}
+
+\begin{figure*}
+\begin{center}
+	\includegraphics[width=0.8\linewidth]{twocart}
+\caption{一个树集成的例子。该包含两棵树的模型解决分类问题，输入变量是每个人的年龄、性别、职业等特征，分类目标是“此人是否喜欢电脑游戏”。树集成将每棵树的输出结果组合起来（本例中为同权重地相加），例如小男孩分类结果为2.9，老爷爷分类结果为-1.9。如果我们设定模型分类阈值为0，则模型认为小男孩喜欢电脑游戏，老爷爷不喜欢。}
+\label{twocart}
+\end{center}
+\end{figure*}
+
+
+本工作采用XGBoost对采食量进行建模。XGBoost\cite{xgboost_github}是一个专注于梯度提升（gradient boost）算法的机器学习函数库，主要特点是具有优良的学习效果和高效的训练速度。该函数库诞生于2014年2月，最初由陈天奇博士设计、开发，论文\cite{Chen2016XGBoost}具体介绍了其实现原理和细节，演示文稿\cite{xgboost_slides}概述了其主要思想和算法原理。
+仅在2015年，在Kaggle\cite{kaggle}竞赛中获胜的29个算法中，有17个使用了XGBoost库。在KDDCup 2015\cite{kddcup2015}竞赛中，排名前十的队伍全部使用了XGBoost库。
+
+XGBoost用于解决监督学习（supervised learning）问题，在监督学习中模型利用训练集进行学习，以通过给定的量$x_i$（多个特征）来预测$y_i$。XGBoost是一种树集成（tree ensemble）模型\footnote{集成（ensemble）模型是一类组合多个性能相对弱的分类器/预测器实现强分类器/预测器的模型。所谓“三个臭皮匠赛过诸葛亮”。}，即通过学习得到多棵树，组合起来解决分类问题或回归问题。
+图\ref{twocart}展示了一个树集成的例子。
+
+XGBoost优化的目标函数如式\ref{objf}所示：
+\begin{equation}
+\label{objf}
+	obj = \sum_{i=1}^n l(y_i, \hat y_i^{(t)}) + \sum_{i=1}^t \Omega(f_i)
+\end{equation}
+其中$l(y_i, \hat y_i^{(t)})$表示模型对第$i$个训练集样本的预测误差（误差指标的定义根据问题的不同可以不同。
+在回归问题中，均方误差MSE是常用的误差指标），$\Omega(f_i)$表示第$i$棵树的复杂度。
+树的复杂度作为正则项，目的是为了控制模型的复杂程度，避免过复杂的模型过度拟合（overfit）训练集而缺乏泛化能力（对未见过样本的预测能力）。
+
+在学习模型参数时，XGBoost采用相加策略：它递推地依次学习出各棵树，每次只增加一棵树，在学习第$t$棵树时，固定前$t-1$棵树不变，而用第$t$棵树去矫正前$t-1$棵树对于样本预测结果的误差（残差学习）。具体地，学习第$t$树时，优化目标函数$obj^{(t)}$为：
+\begin{equation}
+\label{objf_eachtree}
+	obj^{(t)} = \sum_{i=1}^n l(y_i, \hat y_i^{(t-1)} + f_t(x_i)) + \Omega(f_t) + \textrm{常数}
+\end{equation}
+
+更多关于XGBoost算法细节请参考XGBoost网站文档、演示文稿和论文\cite{intro_xgboost, xgboost_slides,Chen2016XGBoost}。下面我们讨论使用XGBoost建模时需要重点考虑的模型参数。
+
+\subsection{模型参数设置}
+
+XGBoost的参数详解可参考\cite{xgboost_para}\footnote{XGBoost提供多种编程语言（Python, R, Java, Scala, C++）接口，该文档介绍R语言接口的参数，但其他语言参数与此基本相同。}。
+
+\para{通用参数：}booster指定使用的booster（提升器），默认值为gbtree。使用默认值即可。
+如想采用线性模型（采食量预测不适合采用线性模型），可以将其设为gblinear。
+
+\para{Tree Booster参数：}
+n\_estimator是树的个数，如需改善过拟合问题，可适当调小n\_estimator。
+max\_depth是最大深度限制（模型构造树时可能尚未到此深度即停止扩展），如需改善过拟合问题，可适当调小max\_depth。由于当前预测采食量的模型使用输入变量很少，通常2-3层的树即足够。
+eta是学习率，通常使用默认值即可，如需改善过拟合问题，可适当调小eta。
+subsample和相关几个参数（colsample\_bytree、colsample\_bylevel）通过对训练集欠采样来避免模型欠拟合。当前预测采食量任务不需要欠采样。
+
+其他参数一般不需要特别设置，使用默认值即可。
+
+\subsection{最优参数搜索}
+\label{best_para}
+
+部分参数取值可以通过由在人为给定的参数空间中网格搜索（grid search，即暴力枚举每一种可能的参数组合）确定。
+为了避免过拟合，在搜索每组参数组合时，可采用多折交叉验证。
+本工作中如不特殊说明，我们采用8折交叉验证。
+
+用Python的scikit-learn库中model\_selection包里的GridSearchCV类\cite{grid_search}可便捷实现利用网格搜索和交叉验证确定最优参数组合。
+
+
+
+\section{相关工作概述}
+\label{related}
+
+《奶牛营养需要》第7版（NRC 2011）\footnote{该手册有中文版，百度搜索其中文名称即可找到、下载。}\cite{USA2001Nutrient}中，第一章讨论奶牛的干物质采食量（Dry Matter Intake，DMI）。下文引自《奶牛营养需要》中文版原文。
+
+用来预测荷斯坦泌乳牛DMI的方程式为：
+\begin{eqnarray}
+\label{eqn:dmi}
+	 \nonumber DMI (kg/d) =&&(0.372  \times FCM \\
+	 \nonumber &&+  0.0968 \times  BW^{0.75}) \\
+	&&\times (1 - e^{-0.192 \times(WOL + 3.67)})
+\end{eqnarray}
+式中FCM=4\%校正乳产量(kg/d)；BW=体重(kg)；WOL为泌乳周龄；$1-e^{-0.192\times(WOL+3.67)}$为校正泌乳早期DMI下降的校正项。对于泌乳早期的产奶牛来说，方程式1-2预测的结果与Kertz等(1991)所建立方程式的预测结果相一致。最初14周龄泌乳牛干物质采食量以不同方程式预测的比较结果列于图\ref{fig:dmi}。
+
+\begin{figure}
+\begin{center}
+	\includegraphics[width=0.9\linewidth]{dmi}
+\caption{用方程式\ref{eqn:dmi}和KERTZ等(1991)推荐方程式预测奶牛泌乳早期干物质采食量变化。（图中方程式1-2对应本文中方程式1。）}
+\label{fig:dmi}
+\end{center}
+\end{figure}
+
+方程式\ref{eqn:dmi}的数据全部来自荷斯坦奶牛。目前还没有公开发表关于DMI的数据用于发展或修正目前预测DMI的方程式，以便能用在荷斯坦牛以外其他品种牛上。关于娟姗牛DMI的预测问题，请参见Holter等(1996)的文章。
+
+DMI预测方程式用于经产奶牛可不必进行校正。
+在热中温区(5$\sim$20℃)以外，泌乳牛的DMI受到环境的影响。Eastridge等(1998)和Holter等(1997)的研究都表明，当环境温度在20℃以上时，DMI随温度的升高而下降。由于没有足够的数据来确定热中温区以外环境对DMI的影响程度，本版NRC泌乳牛DMI预测方程式（方程式\ref{eqn:dmi}）没有考虑温度或湿度校正因子。\documentclass[UTF8,a4paper,10pt, twocolumn]{ctexart}
+\usepackage[left=2.50cm, right=2.50cm, top=2.50cm, bottom=2.50cm]{geometry}
+
+% -- text font --
+% compile using Xelatex
+
+%\setmainfont{Microsoft YaHei}  % 微软雅黑
+%\setmainfont{YouYuan}  % 幼圆    
+%\setmainfont{NSimSun}  % 新宋体
+%\setmainfont{KaiTi}    % 楷体
+%\setmainfont{SimSun}   % 宋体
+%\setmainfont{SimHei}   % 黑体
+
+\usepackage{times}
+%\usepackage{mathpazo}
+%\usepackage{fourier}
+%\usepackage{charter}
+%\usepackage{helvet}
+
+\usepackage{amsmath, amsfonts, amssymb} % math equations, symbols
+\usepackage[english]{babel}
+\usepackage{color}      % color content
+\usepackage{graphicx}   % import figures
+\usepackage{url}        % hyperlinks
+\usepackage{bm}         % bold type for equations
+\usepackage{multirow}
+\usepackage{booktabs}
+\usepackage{epstopdf}
+\usepackage{epsfig}
+\usepackage{algorithm}
+\usepackage{algorithmic}
+\usepackage{diagbox}
+
+
+\renewcommand{\algorithmicrequire}{ \textbf{Input:}}     % use Input in the format of Algorithm  
+\renewcommand{\algorithmicensure}{ \textbf{Initialize:}} % use Initialize in the format of Algorithm  
+\renewcommand{\algorithmicreturn}{ \textbf{Output:}}     % use Output in the format of Algorithm  
+\newcommand{\para}[1]{\smallskip\noindent\textbf{#1}}
+
+\newcommand{\wgs}[1]{\textcolor{blue}{\uline{#1}}}
+
+\usepackage{fancyhdr}   % 设置页眉、页脚
+%\pagestyle{fancy}
+%\lhead{}
+%\chead{}
+%\rhead{head and foot!!}
+%\lfoot{}
+%\cfoot{}
+%\rfoot{}
+
+
+\usepackage{hyperref}   % bookmarks
+\hypersetup{colorlinks, bookmarks, unicode} % unicode
+
+\graphicspath{{figures/}}
+
+
+\title{泌乳牛自由采食量预测}
+\author{王国赛\thanks{邮箱：wgs14@mails.tsinghua.edu.cn}}
+\date{\today}
+
+\begin{document}
+    \maketitle
+    \thispagestyle{fancy}
+
+\input{tex_files/introduction}
+\input{tex_files/related}
+\input{tex_files/analyze}
+\input{tex_files/dataset}
+\input{tex_files/model}
+\input{tex_files/evaluation}
+\input{tex_files/conclusion}
+
+\input{tex_files/appendix}
+
+
+%\begin{thebibliography}{10}
+%
+%\bibitem{micali2016algorand}
+%abccsddf
+%
+%
+%\end{thebibliography}
+
+\renewcommand\refname{参考文献}
+\small
+\bibliographystyle{plain}
+\bibliography{ref} 
+
+
+\end{document}
